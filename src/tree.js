@@ -102,7 +102,7 @@ function skeleton(shape, R) {
 // Low-poly wood: six flat faces round every segment, so the light steps from face to face the
 // way it does on the reference's trunk, and a flared root collar where the trunk meets the
 // ground. Everything is merged into one mesh; aH is height for the sway.
-function woodGeometry(segments, R) {
+function woodGeometry(segments, R, collar) {
   const SIDES = 6;
   const pos = [];
   const nrm = [];
@@ -175,10 +175,8 @@ function woodGeometry(segments, R) {
     // buttress ridges, the way the reference's trunks spread where they meet the grass
     if (index === 0 && s.depth === 0) {
       const r = s.r0;
-      const phase = R() * Math.PI * 2;
-      const ridges = 3 + Math.floor(R() * 2);
-      const bumpLow = (t) => 1 + 0.22 * Math.sin(t * ridges + phase) + 0.06 * Math.sin(t * 2 + 1.7);
-      const bumpMid = (t) => 1 + 0.1 * Math.sin(t * ridges + phase);
+      const bumpLow = collar.bump;
+      const bumpMid = (t) => 1 + 0.1 * Math.sin(t * collar.ridges + collar.phase);
       // a trumpet profile: wide and lumpy in the ground, narrowing fast, then easing into the trunk
       const at = (h) => s.a.clone().addScaledVector(dir, h - s.a.y);
       // the top ring matches the trunk's own radius at that height, so there is no ledge
@@ -195,6 +193,8 @@ function woodGeometry(segments, R) {
       ];
       const axis = heights.map(at);
       for (let k = 0; k < rings.length - 1; k++) tube(rings[k], rings[k + 1], axis[k], axis[k + 1]);
+      // the collar's outline where it crosses the ground, for the tufts of grass round the foot
+      collar.groundRing = ring(at(0), u, v, r * 2.03, bumpLow);
     }
   });
   const g = new THREE.BufferGeometry();
@@ -391,19 +391,22 @@ export function groundGeometry(R) {
   const pos = [];
   const nrm = [];
   const kind = []; // 0 top, 1 side, 2..3 grass (the fraction is the blade's own shade)
+  const tip = []; // 1 at the tip of a blade, 0 at its base and everywhere else
   const idx = [];
   // top: a fan
   pos.push(0, 0, 0);
   nrm.push(0, 1, 0);
   kind.push(0);
+  tip.push(0);
   for (const [x, z] of rim) {
     pos.push(x, 0, z);
     nrm.push(0, 1, 0);
     kind.push(0);
+    tip.push(0);
   }
   for (let i = 0; i < N; i++) idx.push(0, 1 + ((i + 1) % N), 1 + i);
   // side
-  const THICK = 0.06;
+  const THICK = 0.045;
   const sideStart = pos.length / 3;
   for (let i = 0; i < N; i++) {
     const [x, z] = rim[i];
@@ -411,46 +414,114 @@ export function groundGeometry(R) {
     pos.push(x, 0, z, x, -THICK, z);
     nrm.push(x / l, 0, z / l, x / l, 0, z / l);
     kind.push(1, 1);
+    tip.push(0, 0);
   }
   for (let i = 0; i < N; i++) {
     const a = sideStart + i * 2;
     const b = sideStart + ((i + 1) % N) * 2;
     idx.push(a, b, a + 1, a + 1, b, b + 1);
   }
-  // grass: a blade is one triangle, standing with a little lean
-  const blade = (x, z, h, w, leanX, leanZ) => {
-    const ang = R() * Math.PI;
-    const dx = Math.cos(ang) * w;
-    const dz = Math.sin(ang) * w;
-    const s = pos.length / 3;
-    const shade = 2 + R() * 0.999;
-    pos.push(x - dx, 0, z - dz, x + dx, 0, z + dz, x + leanX, h, z + leanZ);
-    nrm.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
-    kind.push(shade, shade, shade);
-    idx.push(s, s + 1, s + 2);
-  };
-  // the carpet: tens of thousands of tiny blades spread evenly over the top, so from the usual
-  // distance the island reads as velvet and up close as fuzz, as in the reference
-  const CARPET = 36000;
+  // the carpet: tens of thousands of tiny blades, one population spread evenly over the whole
+  // top, out to the rim and a little past it. Toward the edge the blades grow longer, lean
+  // outward and finally droop over the side, so the mat ends in fuzz and no ledge shows
+  const CARPET = 46000;
   for (let i = 0; i < CARPET; i++) {
     const t = R() * Math.PI * 2;
-    const r = (radius(t) - 0.03) * Math.sqrt(R());
-    const lean = 0.02 * R();
+    const f = Math.sqrt(R()) * 1.03; // 0 at the centre, 1 at the rim, a little beyond
+    const edge = smooth01((f - 0.84) / 0.19);
+    const r = radius(t) * f;
+    const x = Math.cos(t) * r;
+    const z = Math.sin(t) * r * DEPTH;
+    const h = (0.025 + 0.035 * R()) * (1 + 1.6 * edge);
     const la = R() * Math.PI * 2;
-    blade(Math.cos(t) * r, Math.sin(t) * r * DEPTH, 0.02 + 0.03 * R(), 0.005 + 0.006 * R(), Math.cos(la) * lean, Math.sin(la) * lean);
-  }
-  // the fringe: slightly taller blades along the rim, leaning out over the edge
-  const FRINGE = 4000;
-  for (let i = 0; i < FRINGE; i++) {
-    const t = R() * Math.PI * 2;
-    const r = radius(t) - R() * 0.12;
-    const lean = 0.02 + 0.05 * R();
-    blade(Math.cos(t) * r, Math.sin(t) * r * DEPTH, 0.03 + 0.04 * R(), 0.006 + 0.007 * R(), Math.cos(t) * lean, Math.sin(t) * lean);
+    const lean = 0.02 * R();
+    const out = edge * (0.04 + 0.08 * R());
+    const droop = edge * (0.05 + 0.05 * R());
+    grassBlade(pos, nrm, kind, tip, idx, R, x, z, 0.005 + 0.006 * R(), x + Math.cos(la) * lean + Math.cos(t) * out, h - droop, z + Math.sin(la) * lean + Math.sin(t) * out);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
   g.setAttribute('aKind', new THREE.Float32BufferAttribute(kind, 1));
+  g.setAttribute('aTip', new THREE.Float32BufferAttribute(tip, 1));
+  g.setIndex(idx);
+  return g;
+}
+
+const smooth01 = (x) => {
+  const k = Math.max(0, Math.min(1, x));
+  return k * k * (3 - 2 * k);
+};
+
+// one blade of grass: a triangle with its base on the ground at (x, z) and its tip at (tx, ty, tz)
+function grassBlade(pos, nrm, kind, tip, idx, R, x, z, w, tx, ty, tz) {
+  const ang = R() * Math.PI;
+  const dx = Math.cos(ang) * w;
+  const dz = Math.sin(ang) * w;
+  const s = pos.length / 3;
+  const shade = 2 + R() * 0.999;
+  pos.push(x - dx, 0, z - dz, x + dx, 0, z + dz, tx, ty, tz);
+  nrm.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
+  kind.push(shade, shade, shade);
+  tip.push(0, 0, 1);
+  idx.push(s, s + 1, s + 2);
+}
+
+/* ---------------------------------------------------------------- tufts at the foot */
+
+// Grass tufts round the foot of the trunk: taller than the carpet and leaning away from the
+// trunk, so the root collar sinks into grass instead of meeting the ground along a hard line.
+// They start on the collar's own foot ring (buttresses included), so the seam is covered
+// wherever the wood actually enters the ground.
+function footTufts(segments, collar, R) {
+  const s = segments.find((t) => t.depth === 0);
+  const pos = [];
+  const nrm = [];
+  const kind = [];
+  const tip = [];
+  const idx = [];
+  if (s && collar.groundRing) {
+    const r = s.r0;
+    const k = r / 0.115; // scale with the trunk
+    const cx = s.a.x;
+    const cz = s.a.z;
+    const poly = collar.groundRing;
+    // how far from the trunk's axis the collar's outline lies in the direction (dx, dz)
+    const outline = (dx, dz) => {
+      let best = Infinity;
+      for (let i = 0; i < poly.length; i++) {
+        const a = poly[i];
+        const b = poly[(i + 1) % poly.length];
+        const ex = b.x - a.x;
+        const ez = b.z - a.z;
+        const den = dx * ez - dz * ex;
+        if (Math.abs(den) < 1e-9) continue;
+        const t = ((a.x - cx) * ez - (a.z - cz) * ex) / den;
+        const w = ((a.x - cx) * dz - (a.z - cz) * dx) / den;
+        if (t > 0 && w >= 0 && w <= 1) best = Math.min(best, t);
+      }
+      return best === Infinity ? r * 2 : best;
+    };
+    const N = Math.round(700 * k);
+    for (let i = 0; i < N; i++) {
+      const phi = R() * Math.PI * 2;
+      const dx = Math.cos(phi);
+      const dz = Math.sin(phi);
+      const spread = Math.pow(R(), 1.6); // most tufts right against the wood
+      const d = outline(dx, dz) * 1.01 + r * 1.6 * spread;
+      const x = cx + dx * d;
+      const z = cz + dz * d;
+      const near = 1 - spread; // 1 against the wood, 0 at the outer edge of the ring
+      const h = (0.05 + 0.06 * R()) * (0.45 + 1.0 * near) * k;
+      const lean = (0.03 + 0.05 * R()) * k;
+      grassBlade(pos, nrm, kind, tip, idx, R, x, z, 0.006 + 0.007 * R(), x + dx * lean, h, z + dz * lean);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('aKind', new THREE.Float32BufferAttribute(kind, 1));
+  g.setAttribute('aTip', new THREE.Float32BufferAttribute(tip, 1));
   g.setIndex(idx);
   return g;
 }
@@ -460,10 +531,16 @@ export function groundGeometry(R) {
 export function buildTree(shape, seed) {
   const R = seeded(seed);
   const bones = skeleton(shape, R);
-  const wood = woodGeometry(bones.segments, R);
+  // the root collar's buttresses: three or four ridges, turned at random
+  const phase = R() * Math.PI * 2;
+  const ridges = 3 + Math.floor(R() * 2);
+  const collar = { phase, ridges, bump: (t) => 1 + 0.22 * Math.sin(t * ridges + phase) + 0.06 * Math.sin(t * 2 + 1.7) };
+  const wood = woodGeometry(bones.segments, R, collar);
+  const tufts = footTufts(bones.segments, collar, R);
   const leaves = leafCloud(shape, bones, R);
   return {
     wood,
+    tufts,
     leaves: leaves.geometry,
     leafCount: leaves.count,
     top: Math.max(bones.top, leaves.top),

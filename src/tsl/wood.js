@@ -36,6 +36,7 @@ export function groundMaterial(u) {
   const m = new THREE.NodeMaterial();
   m.side = THREE.DoubleSide;
   const kind = attribute('aKind', 'float');
+  const tip = attribute('aTip', 'float'); // 0 at a blade's base, 1 at its tip
   m.fragmentNode = Fn(() => {
     const isSide = smoothstep(0.5, 1.5, kind);
     const isGrass = smoothstep(1.5, 2.0, kind);
@@ -47,7 +48,6 @@ export function groundMaterial(u) {
       // lighter toward its tip; the carpet is lighter toward the sun and mottled in soft patches
       const plate = mix(top, side, 0.3);
       const own = fract(kind).mul(0.24).add(0.88);
-      const tip = smoothstep(0.0, 0.04, positionWorld.y);
       const patch = sin(positionWorld.x.mul(2.3).add(0.4)).mul(sin(positionWorld.z.mul(2.9).add(1.1))).mul(0.05).add(1.0);
       const sunward = positionWorld.x.mul(0.04).add(1.0);
       const grass = mix(side, top.mul(1.12), tip).mul(own);

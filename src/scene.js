@@ -99,12 +99,14 @@ export async function createScene(host, hooks = {}) {
     const woodShadow = new THREE.Mesh(built.wood, materials.woodShadow);
     const leafShadow = new THREE.Mesh(built.leaves, materials.leafShadow);
     const wood = new THREE.Mesh(built.wood, materials.wood);
+    const tufts = new THREE.Mesh(built.tufts, materials.ground); // grass round the foot, rebuilt with the tree
     const leaves = new THREE.Mesh(built.leaves, materials.leaf);
+    tufts.renderOrder = 0;
     woodShadow.renderOrder = 1;
     leafShadow.renderOrder = 2;
     wood.renderOrder = 3;
     leaves.renderOrder = 4;
-    for (const m of [woodShadow, leafShadow, wood, leaves]) {
+    for (const m of [tufts, woodShadow, leafShadow, wood, leaves]) {
       m.frustumCulled = false;
       tree.add(m);
     }
