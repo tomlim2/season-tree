@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="잎 수천 장으로 그린 나무 한 그루. 계절을 바꾸면 색이 한 장씩 바뀌고, 모양을 바꾸면 새로 자라고, 바람에 잎이 날려 간다. three.js TSL로 그린 실시간 장면 (WebGPU, 없으면 WebGL 2)." />
+    <title>계절나무</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main id="app" data-season="blossom">
+      <div class="sky" id="sky-old" aria-hidden="true"></div>
+      <div class="sky" id="sky-new" aria-hidden="true"></div>
+      <div id="stage" aria-hidden="true"></div>
+      <h1 class="sr">계절나무</h1>
+      <nav class="seasons" id="seasons" aria-label="계절"></nav>
+      <nav class="shapes" id="shapes" aria-label="나무 모양"></nav>
+      <div class="bottom">
+        <button type="button" class="renew" id="renew"><span class="big">새 나무</span><span class="small">스페이스 키로도</span></button>
+      </div>
+      <p class="fail" id="fail" hidden>이 장면은 WebGPU 또는 WebGL 2가 필요한데, 이 브라우저에서는 시작하지 못했어요.</p>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

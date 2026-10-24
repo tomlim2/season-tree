@@ -1,0 +1,169 @@
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: #f9e4ee;
+  font: 13px/1.4 -apple-system, 'Apple SD Gothic Neo', system-ui, sans-serif;
+  color: #3a3545;
+}
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+#app {
+  position: fixed;
+  inset: 0;
+}
+.sky {
+  position: absolute;
+  inset: 0;
+}
+#stage {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+  cursor: grab;
+}
+#stage:active {
+  cursor: grabbing;
+}
+.stage {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* the buttons: white pills with a soft shadow, as light as the scene */
+button {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: rgb(255 255 255 / 0.92);
+  box-shadow: 0 2px 10px rgb(40 30 60 / 0.12);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgb(40 30 60 / 0.16);
+}
+button:active {
+  transform: translateY(0);
+}
+button:focus-visible {
+  outline: 2px solid #3a3545;
+  outline-offset: 2px;
+}
+[data-season='night'] button {
+  background: rgb(230 236 250 / 0.92);
+}
+
+.seasons {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  gap: 10px;
+}
+.season {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  position: relative;
+}
+.season::before {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: conic-gradient(var(--a) 0 40%, var(--b) 0 70%, var(--c) 0 100%);
+}
+.season::after {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  background: var(--d);
+}
+.season.on {
+  box-shadow: 0 0 0 2px #3a3545 inset, 0 2px 10px rgb(40 30 60 / 0.12);
+}
+
+.shapes {
+  position: absolute;
+  left: max(14px, env(safe-area-inset-left));
+  top: 50%;
+  translate: 0 -50%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.shape {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+.shape svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: #3a3545;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.shape.on {
+  box-shadow: 0 0 0 2px #3a3545 inset, 0 2px 10px rgb(40 30 60 / 0.12);
+}
+
+.bottom {
+  position: absolute;
+  inset-inline: 0;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  display: flex;
+  justify-content: center;
+}
+.renew {
+  border-radius: 10px;
+  padding: 8px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.renew .big {
+  font-size: 14px;
+  font-weight: 600;
+}
+.renew .small {
+  font-size: 10px;
+  opacity: 0.55;
+}
+
+.fail {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 0 10vw;
+  text-align: center;
+  color: rgb(0 0 0 / 0.6);
+}
+.fail[hidden] {
+  display: none;
+}
