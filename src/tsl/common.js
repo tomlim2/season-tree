@@ -27,6 +27,7 @@ export function createUniforms() {
     top: uniform(4), // how tall the tree is, for the bend
     sun: uniform(SUN.clone()),
     wipe: uniform(1), // 0 start .. 1 done
+    leafScale: uniform(1), // the season's leaf size: small petals in spring, broad leaves in summer
     // the canopy as a few balls (x, y, z, radius; radius 0 = unused) and the trunk
     // (radius, height of the fork), for the shadow the grass works out for itself
     balls: uniformArray(Array.from({ length: BALLS }, () => new THREE.Vector4(0, 0, 0, 0))),

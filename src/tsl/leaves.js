@@ -1,9 +1,9 @@
 // The leaves: thousands of small cards. The vertex stage hangs each one on its branch, sways it
 // in the wind, and for the few that are marked to fall, flies it off to the left, lays it on the
 // ground, lets it fade and grows it back. The fragment stage paints a flat seasonal colour and
-// cuts the card into a petal with a soft edge.
+// cuts the card into a rounded leaf.
 import * as THREE from 'three/webgpu';
-import { Fn, If, Discard, attribute, positionGeometry, uv, float, vec2, vec3, vec4, length, mix, sin, cos, fract, floor, smoothstep, max } from 'three/tsl';
+import { Fn, If, Discard, attribute, positionGeometry, uv, float, vec2, vec3, vec4, length, mix, sin, cos, fract, smoothstep, step } from 'three/tsl';
 import { seasonal, pick, bendAt, qRotate, qMul, qAxis, toGround } from './common.js';
 
 // where a leaf is right now, how big, and how it is turned: shared by the leaves and their shadows
@@ -50,17 +50,18 @@ const leafPlacement = (u) =>
   });
   // a newly planted tree leafs out from the ground up
   scale.mulAssign(smoothstep(0.0, 0.6, u.grow.sub(h.mul(0.14)).sub(phase.mul(0.35))));
-  const local = vec3(positionGeometry.xy.mul(size).mul(scale), 0.0);
+  const local = vec3(positionGeometry.xy.mul(size).mul(scale).mul(u.leafScale), 0.0);
   return pos.add(qRotate(rot, local));
   })();
 
-// The leaf's shape: a petal, round at the stem and narrowing to the tip, with a soft edge.
-// Returns how far inside the petal this pixel is (0 edge .. 1 centre) and its coverage.
+// The leaf's shape: a rounded blob, a touch narrower toward the tip, with a crisp edge (the
+// multisample mask only smooths the last few percent). Returns the distance from the centre
+// (0 .. 1 at the edge) and the coverage.
 const petal = () => {
   const p = uv().sub(0.5);
-  const q = vec2(p.x, p.y.div(float(1.0).sub(p.x.add(0.5).mul(0.42))));
+  const q = vec2(p.x, p.y.div(float(1.0).sub(p.x.add(0.5).mul(0.22))));
   const d = length(q).mul(2.0);
-  const cover = smoothstep(1.0, 0.88, d);
+  const cover = smoothstep(1.0, 0.94, d);
   If(cover.lessThan(0.02), () => {
     Discard();
   });
@@ -73,20 +74,19 @@ export function leafMaterial(u) {
   m.alphaToCoverage = true; // soft edges through the multisample mask, no sorting needed
   m.positionNode = leafPlacement(u);
   m.fragmentNode = Fn(() => {
-    const { d, cover, p } = petal();
+    const { cover } = petal();
     const data = attribute('aData', 'vec4'); // colour slot, phase, fall, light (0 shadow .. 1 lit)
     const lit = data.w;
-    // each leaf's own colour sits between two of the season's colours, so no two are quite alike
-    const second = floor(fract(data.y.mul(5.13)).mul(4.0));
-    const blend = fract(data.y.mul(3.71)).mul(0.5);
-    const col = seasonal(u, (s) => {
-      const base = mix(pick(data.x, s.leaves), pick(second, s.leaves), blend);
-      return mix(s.leafShade, mix(base, s.leafLight, smoothstep(0.62, 1.0, lit).mul(0.8)), smoothstep(0.0, 0.7, lit));
-    }).toVar();
-    // a little scatter from leaf to leaf, a gentle wash from stem to tip, and a lighter rim
-    col.mulAssign(fract(data.y.mul(7.31)).mul(0.14).add(0.93));
-    col.mulAssign(p.x.add(0.5).mul(0.16).add(0.92));
-    col.mulAssign(smoothstep(0.55, 1.0, d).mul(0.1).add(1.0));
+    // three flat tones, as in the reference: the shadow colour over the far side of each lobe,
+    // the leaf's own colour across the middle, the light colour on the cap toward the sun. Each
+    // leaf is one flat colour, so a band of leaves reads as one solid mass
+    // ... though not every leaf in a band takes the band's colour: on the lit cap about half stay
+    // the middle colour, so the light leaves lie scattered over it like the reference's pale discs
+    const phase = data.y;
+    const shadeW = smoothstep(0.4, 0.33, lit).mul(step(fract(phase.mul(4.73)), 0.85));
+    const lightW = smoothstep(0.68, 0.75, lit).mul(step(fract(phase.mul(9.17)), 0.55));
+    const col = seasonal(u, (s) => mix(mix(pick(data.x, s.leaves), s.leafShade, shadeW), s.leafLight, lightW)).toVar();
+    col.mulAssign(fract(data.y.mul(7.31)).mul(0.06).add(0.97)); // the slightest scatter
     return vec4(col, cover);
   })();
   return m;

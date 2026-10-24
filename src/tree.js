@@ -29,15 +29,16 @@ function skeleton(shape, R) {
     // a branch wanders a little along its length: three sub-segments with small turns
     let p = from.clone();
     let d = dir.clone();
-    const n = 3;
+    const n = 5; // five short pieces, each turning a little and lifting a little, so a branch curves up instead of kinking
+    const taper = depth === 0 ? 0.25 : 0.45;
     for (let i = 0; i < n; i++) {
       const q = p.clone().addScaledVector(d, length / n);
-      const r0 = radius * (1 - (0.3 * i) / n);
-      const r1 = radius * (1 - (0.3 * (i + 1)) / n);
+      const r0 = radius * (1 - (taper * i) / n);
+      const r1 = radius * (1 - (taper * (i + 1)) / n);
       segments.push({ a: p, b: q, r0, r1, depth });
       p = q;
       top = Math.max(top, p.y);
-      d = d.clone().add(new THREE.Vector3((R() - 0.5) * T.wobble, (R() - 0.5) * T.wobble * 0.5, (R() - 0.5) * T.wobble)).normalize();
+      d = d.clone().add(new THREE.Vector3((R() - 0.5) * T.wobble * 0.6, (R() - 0.5) * T.wobble * 0.3 + (T.lift ?? 0.05), (R() - 0.5) * T.wobble * 0.6)).normalize();
     }
     joints.push({ p: p.clone(), dir: d.clone(), depth });
     if (depth >= T.depth) {
@@ -67,7 +68,7 @@ function skeleton(shape, R) {
       nd.y += T.up * 0.5;
       nd.normalize();
       // the main limbs stay thick, like the trunk; twigs thin out faster
-      grow(p, nd, length * T.falloff * (0.85 + 0.3 * R()), radius * (depth === 0 ? 0.68 : 0.6), depth + 1);
+      grow(p, nd, length * T.falloff * (0.85 + 0.3 * R()), radius * (depth === 0 ? 0.62 : 0.55), depth + 1);
     }
   };
   const lean = new THREE.Vector3((R() - 0.5) * 0.16, 1, (R() - 0.5) * 0.16).normalize();
@@ -332,7 +333,7 @@ function leafCloud(shape, bones, R) {
       q.setFromEuler(e);
       quat.set([q.x, q.y, q.z, q.w], i * 4);
     }
-    const s = L.size * (0.7 + 0.6 * R()) * (a.fluff ? 1.35 : 1.0);
+    const s = L.size * (0.7 + 0.6 * R()) * (a.fluff ? 1.25 : 1.0);
     size.set([s, s * L.aspect * (0.8 + 0.4 * R())], i * 2);
     // light: each lobe is shaded as a ball by the sun (bright on the upper right, the shadow
     // colour on the lower left), darker deep inside the lobe, a touch lighter near the crown
@@ -344,9 +345,18 @@ function leafCloud(shape, bones, R) {
     const lambert = nn.dot(SUN);
     let lit = 0.12 + 0.88 * Math.max(0, Math.min(1, (lambert + 0.55) / 1.35));
     lit *= 0.55 + 0.45 * Math.min(depth / 0.8, 1);
+    // where one lobe pushes into another there is a crevice, and the reference's canopy is
+    // darkest in those seams: a leaf inside a neighbouring lobe is pulled toward the shadow
+    let crevice = 0;
+    for (let k = 0; k < lobeCentres.length; k++) {
+      if (lobeCentres[k] === a.c) continue;
+      const dd = a.p.distanceTo(lobeCentres[k]) / lobeRadii[k];
+      if (dd < 0.95) crevice += 1 - dd / 0.95;
+    }
+    lit *= 1 - Math.min(crevice, 1) * 0.55;
     lit = Math.max(0, Math.min(1, lit + 0.12 * (height - 0.5)));
-    const slot = R() < 0.04 ? 4 : Math.floor(R() * 4); // the fifth slot is the rare accent colour
-    const falls = R() < 0.14 ? 1 : 0;
+    const slot = R() < 0.015 ? 4 : Math.floor(R() * 4); // the fifth slot is the rare accent colour
+    const falls = R() < 0.06 ? 1 : 0;
     data.set([slot, R(), falls ? 0.3 + 0.7 * R() : 0, lit], i * 4);
   });
   const geo = new THREE.InstancedBufferGeometry();
@@ -393,7 +403,7 @@ export function groundGeometry(R) {
   }
   for (let i = 0; i < N; i++) idx.push(0, 1 + ((i + 1) % N), 1 + i);
   // side
-  const THICK = 0.14;
+  const THICK = 0.06;
   const sideStart = pos.length / 3;
   for (let i = 0; i < N; i++) {
     const [x, z] = rim[i];
@@ -419,22 +429,23 @@ export function groundGeometry(R) {
     kind.push(shade, shade, shade);
     idx.push(s, s + 1, s + 2);
   };
-  // the carpet, spread evenly over the top
-  const CARPET = 6000;
+  // the carpet: tens of thousands of tiny blades spread evenly over the top, so from the usual
+  // distance the island reads as velvet and up close as fuzz, as in the reference
+  const CARPET = 36000;
   for (let i = 0; i < CARPET; i++) {
     const t = R() * Math.PI * 2;
-    const r = (radius(t) - 0.08) * Math.sqrt(R());
-    const lean = 0.06 * R();
+    const r = (radius(t) - 0.03) * Math.sqrt(R());
+    const lean = 0.02 * R();
     const la = R() * Math.PI * 2;
-    blade(Math.cos(t) * r, Math.sin(t) * r * DEPTH, 0.06 + 0.1 * R(), 0.018 + 0.02 * R(), Math.cos(la) * lean, Math.sin(la) * lean);
+    blade(Math.cos(t) * r, Math.sin(t) * r * DEPTH, 0.02 + 0.03 * R(), 0.005 + 0.006 * R(), Math.cos(la) * lean, Math.sin(la) * lean);
   }
-  // the fringe: taller blades along the rim, leaning outward, so the edge is shaggy
-  const FRINGE = 900;
+  // the fringe: slightly taller blades along the rim, leaning out over the edge
+  const FRINGE = 4000;
   for (let i = 0; i < FRINGE; i++) {
     const t = R() * Math.PI * 2;
-    const r = radius(t) - R() * 0.25;
-    const lean = 0.05 + 0.1 * R();
-    blade(Math.cos(t) * r, Math.sin(t) * r * DEPTH, 0.09 + 0.12 * R(), 0.022 + 0.025 * R(), Math.cos(t) * lean, Math.sin(t) * lean);
+    const r = radius(t) - R() * 0.12;
+    const lean = 0.02 + 0.05 * R();
+    blade(Math.cos(t) * r, Math.sin(t) * r * DEPTH, 0.03 + 0.04 * R(), 0.006 + 0.007 * R(), Math.cos(t) * lean, Math.sin(t) * lean);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));

@@ -1,7 +1,7 @@
 // The wood, lit face by face by the sun, bending with the wind; the island the tree stands on,
 // with the tree's shadow lying across its grass.
 import * as THREE from 'three/webgpu';
-import { Fn, attribute, positionLocal, normalWorld, positionWorld, float, vec3, vec4, dot, smoothstep, mix, fract } from 'three/tsl';
+import { Fn, attribute, positionLocal, normalWorld, positionWorld, float, vec3, vec4, dot, smoothstep, mix, fract, sin } from 'three/tsl';
 import { seasonal, bendAt, toGround, treeShade } from './common.js';
 
 const bent = (u) => {
@@ -43,12 +43,15 @@ export function groundMaterial(u) {
     const col = seasonal(u, (s) => {
       const top = s.ground[0];
       const side = s.ground[1];
-      // the plate between the blades sits a little darker; each blade has its own shade, and
-      // is lighter toward its tip
-      const plate = mix(top, side, 0.45);
-      const own = fract(kind).mul(0.3).add(0.85);
-      const grass = mix(side, top.mul(1.1), smoothstep(0.0, 0.2, positionWorld.y)).mul(own);
-      const base = mix(mix(plate, side, isSide), grass, isGrass);
+      // the plate between the blades sits a little darker; each blade has its own shade and is
+      // lighter toward its tip; the carpet is lighter toward the sun and mottled in soft patches
+      const plate = mix(top, side, 0.3);
+      const own = fract(kind).mul(0.24).add(0.88);
+      const tip = smoothstep(0.0, 0.04, positionWorld.y);
+      const patch = sin(positionWorld.x.mul(2.3).add(0.4)).mul(sin(positionWorld.z.mul(2.9).add(1.1))).mul(0.05).add(1.0);
+      const sunward = positionWorld.x.mul(0.04).add(1.0);
+      const grass = mix(side, top.mul(1.12), tip).mul(own);
+      const base = mix(mix(plate, side, isSide), grass, isGrass).mul(patch).mul(sunward);
       return mix(base, s.shadow, shade.mul(0.62));
     });
     return vec4(col, 1.0);

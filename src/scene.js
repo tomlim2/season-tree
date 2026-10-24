@@ -55,6 +55,7 @@ export async function createScene(host, hooks = {}) {
   let wiping = -1; // time the wipe started, or -1
   setSeason(u.old, THEMES[0]);
   setSeason(u.now, THEMES[0]);
+  u.leafScale.value = THEMES[0].leafScale ?? 1;
   function wear(index) {
     if (index === season) return;
     // the season that is showing becomes the old one, in full; the new one wipes in
@@ -173,6 +174,8 @@ export async function createScene(host, hooks = {}) {
     // the wind: a steady breath with gusts
     u.wind.value = 0.45 + 0.3 * Math.sin(t * 0.37) + 0.25 * Math.sin(t * 0.91 + 1.7) * Math.sin(t * 0.23);
     u.grow.value = t - planted;
+    // the leaves ease toward the season's size while the colours wipe across
+    u.leafScale.value += ((THEMES[season].leafScale ?? 1) - u.leafScale.value) * (1 - Math.exp(-dt / 0.4));
     look.yaw += (look.tyaw - look.yaw) * (1 - Math.exp(-dt / 0.25));
     look.pitch += (look.tpitch - look.pitch) * (1 - Math.exp(-dt / 0.25));
     aim(t);
@@ -216,6 +219,7 @@ export async function createScene(host, hooks = {}) {
       camera,
       look,
       target,
+      root: scene,
       get leafCount() {
         return leafCount;
       },
