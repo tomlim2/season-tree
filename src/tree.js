@@ -1,6 +1,7 @@
 // Growing a tree: a skeleton of branches, low-poly wood around it, and a cloud of leaf cards hung
 // where the shape says. Everything here is plain geometry; the shaders move and colour it.
 import * as THREE from 'three/webgpu';
+import { SUN } from './tsl/common.js';
 
 export function seeded(seed) {
   let s = seed >>> 0;
@@ -22,6 +23,7 @@ function skeleton(shape, R) {
   const T = shape.trunk;
   const segments = [];
   const tips = [];
+  const joints = []; // where a branch of each depth ends: { p, dir, depth }
   let top = 0;
   const grow = (from, dir, length, radius, depth) => {
     // a branch wanders a little along its length: three sub-segments with small turns
@@ -37,6 +39,7 @@ function skeleton(shape, R) {
       top = Math.max(top, p.y);
       d = d.clone().add(new THREE.Vector3((R() - 0.5) * T.wobble, (R() - 0.5) * T.wobble * 0.5, (R() - 0.5) * T.wobble)).normalize();
     }
+    joints.push({ p: p.clone(), dir: d.clone(), depth });
     if (depth >= T.depth) {
       tips.push({ p: p.clone(), dir: d.clone(), radius });
       return;
@@ -75,7 +78,7 @@ function skeleton(shape, R) {
       }
     }
   }
-  return { segments, tips, top };
+  return { segments, tips, joints, top };
 }
 
 /* ---------------------------------------------------------------- wood */
@@ -136,25 +139,47 @@ function leafCloud(shape, bones, R) {
   const anchors = []; // { p, c, dir?, flat }
   const sphere = (centre, radius, count, shell = 0.35) => {
     for (let i = 0; i < count; i++) {
-      const r = radius * Math.pow(R(), shell);
+      const r = radius * Math.pow(R(), shell) * (R() < 0.08 ? 1.0 + 0.18 * R() : 1.0);
       const th = R() * Math.PI * 2;
       const ph = Math.acos(2 * R() - 1);
       const p = new THREE.Vector3(centre.x + r * Math.sin(ph) * Math.cos(th), centre.y + r * Math.cos(ph) * 0.85, centre.z + r * Math.sin(ph) * Math.sin(th));
-      anchors.push({ p, c: centre });
+      anchors.push({ p, c: centre, r: radius });
     }
   };
-  if (L.kind === 'clumps') {
-    for (const tip of bones.tips) {
-      const centre = tip.p.clone().addScaledVector(tip.dir, L.radius * 0.35);
-      sphere(centre, L.radius * (0.8 + 0.4 * R()), Math.round(L.perClump * (0.7 + 0.6 * R())));
-    }
-  } else if (L.kind === 'willow') {
-    for (const tip of bones.tips) {
-      const centre = tip.p.clone().addScaledVector(tip.dir, L.radius * 0.3);
-      sphere(centre, L.radius * (0.8 + 0.4 * R()), L.perClump);
-      // strands hanging from the clump, each a chain of small leaves
+  // the crown: a handful of cotton-ball lobes set round a centre above the fork of the trunk,
+  // each shaded as its own ball, so the canopy reads as lumps and not as one cloud
+  const forks = bones.joints.filter((j) => j.depth === 1);
+  const crown = new THREE.Vector3();
+  for (const j of forks.length ? forks : bones.tips) crown.add(j.p);
+  crown.divideScalar(Math.max(forks.length || bones.tips.length, 1));
+  crown.x *= 0.5;
+  crown.z *= 0.5;
+  crown.y += L.radius * (L.kind === 'willow' ? 0.7 : 0.9) * (L.crownLift ?? 1);
+  const lobeCentres = [];
+  const lobeRadii = [];
+  const lobes = L.lobes ?? 5 + Math.floor(R() * 3);
+  for (let i = 0; i < lobes; i++) {
+    const az = (i / lobes) * Math.PI * 2 + (R() - 0.5) * 0.9;
+    const el = (R() - 0.3) * 1.2; // mostly round the sides, a couple on top
+    const dir = new THREE.Vector3(Math.cos(el) * Math.cos(az), Math.sin(el) * (L.flat ?? 1), Math.cos(el) * Math.sin(az));
+    const r = L.radius * (0.85 + 0.3 * R());
+    const centre = crown.clone().addScaledVector(dir, L.radius * (L.lobeSpread ?? 0.8));
+    centre.y = Math.max(centre.y, r * 0.9 + 0.2);
+    lobeCentres.push(centre);
+    lobeRadii.push(r);
+    const count = Math.round(L.perClump * (0.8 + 0.4 * R()));
+    sphere(centre, r, count, 0.3);
+    // a smaller lobe grown on its side
+    const off = new THREE.Vector3(R() - 0.5, (R() - 0.5) * 0.6, R() - 0.5).normalize().multiplyScalar(r * 0.8);
+    sphere(centre.clone().add(off), r * (0.5 + 0.2 * R()), Math.round(count * 0.3), 0.3);
+  }
+  if (L.kind === 'willow') {
+    // strands hanging from the underside of every lobe, each a chain of small leaves
+    lobeCentres.forEach((centre, li) => {
       for (let s = 0; s < L.strands; s++) {
-        const start = centre.clone().add(new THREE.Vector3((R() - 0.5) * 1.4, (R() - 0.5) * 0.4, (R() - 0.5) * 1.4));
+        const az = R() * Math.PI * 2;
+        const el = -R() * 1.2;
+        const start = centre.clone().add(new THREE.Vector3(Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)).multiplyScalar(lobeRadii[li] * 0.9));
         const drift = new THREE.Vector3((R() - 0.5) * 0.3, 0, (R() - 0.5) * 0.3);
         const drop = L.drop * (0.6 + 0.6 * R());
         const n = Math.round(drop / 0.11);
@@ -162,10 +187,13 @@ function leafCloud(shape, bones, R) {
           const t = i / n;
           const p = start.clone().addScaledVector(drift, t).add(new THREE.Vector3(0, -drop * t, 0));
           if (p.y < 0.15) break;
-          anchors.push({ p, c: centre, strand: true });
+          anchors.push({ p, c: centre, r: lobeRadii[li], strand: true });
         }
       }
-    }
+    });
+  }
+  if (L.kind === 'clumps' || L.kind === 'willow') {
+    // nothing more: the lobes are the canopy
   } else if (L.kind === 'cone') {
     const centre = new THREE.Vector3(0, L.height * 0.45, 0);
     for (let i = 0; i < L.count; i++) {
@@ -225,13 +253,20 @@ function leafCloud(shape, bones, R) {
     }
     const s = L.size * (0.7 + 0.6 * R());
     size.set([s, s * L.aspect * (0.8 + 0.4 * R())], i * 2);
-    // brightness: higher leaves and the sunward side are lighter, a little per-leaf scatter
+    // light: each lobe is shaded as a ball by the sun (bright on the upper right, the shadow
+    // colour on the lower left), darker deep inside the lobe, a touch lighter near the crown
     const height = (a.p.y - lo) / Math.max(hi - lo, 0.01);
-    const sunward = tmp.subVectors(a.p, a.c).normalize().x; // the sun is to the right
-    const shade = 0.78 + 0.3 * height + 0.1 * sunward + (R() - 0.5) * 0.12;
+    const out = tmp.subVectors(a.p, a.c);
+    const depth = Math.min(out.length() / Math.max(a.r || 1, 0.01), 1.2);
+    const n = out.lengthSq() > 1e-6 ? out.normalize() : tmp.set(0, 1, 0);
+    if (a.needle || a.strand) n.y += 0.5;
+    const lambert = n.dot(SUN);
+    let lit = 0.12 + 0.88 * Math.max(0, Math.min(1, (lambert + 0.55) / 1.35));
+    lit *= 0.55 + 0.45 * Math.min(depth / 0.8, 1);
+    lit = Math.max(0, Math.min(1, lit + 0.12 * (height - 0.5)));
     const slot = R() < 0.04 ? 4 : Math.floor(R() * 4); // the fifth slot is the rare accent colour
     const falls = R() < 0.14 ? 1 : 0;
-    data.set([slot, R(), falls ? 0.3 + 0.7 * R() : 0, shade], i * 4);
+    data.set([slot, R(), falls ? 0.3 + 0.7 * R() : 0, lit], i * 4);
   });
   const geo = new THREE.InstancedBufferGeometry();
   const quad = new THREE.PlaneGeometry(1, 1);

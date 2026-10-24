@@ -66,9 +66,15 @@ export function leafMaterial(u) {
   m.positionNode = leafPlacement(u);
   m.fragmentNode = Fn(() => {
     oval();
-    const data = attribute('aData', 'vec4');
-    const col = seasonal(u, (s) => pick(data.x, s.leaves));
-    return vec4(col.mul(data.w), 1.0);
+    const data = attribute('aData', 'vec4'); // colour slot, phase, fall, light (0 shadow .. 1 lit)
+    const lit = data.w;
+    const col = seasonal(u, (s) => {
+      const base = pick(data.x, s.leaves);
+      return mix(s.leafShade, mix(base, s.leafLight, smoothstep(0.62, 1.0, lit).mul(0.8)), smoothstep(0.0, 0.7, lit));
+    });
+    // a little scatter from leaf to leaf, so a lobe is never a flat gradient
+    const jitter = fract(data.y.mul(7.31)).mul(0.14).add(0.93);
+    return vec4(col.mul(jitter), 1.0);
   })();
   return m;
 }

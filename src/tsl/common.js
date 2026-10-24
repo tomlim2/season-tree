@@ -10,6 +10,8 @@ export const SUN = new THREE.Vector3(1, 0.72, 0.3).normalize(); // toward the su
 function seasonUniforms() {
   return {
     leaves: Array.from({ length: 5 }, () => uniform(new THREE.Color())),
+    leafShade: uniform(new THREE.Color()),
+    leafLight: uniform(new THREE.Color()),
     wood: [uniform(new THREE.Color()), uniform(new THREE.Color())],
     ground: [uniform(new THREE.Color()), uniform(new THREE.Color())],
     shadow: uniform(new THREE.Color()),
@@ -33,6 +35,8 @@ export function createUniforms() {
 export function setSeason(set, theme) {
   const cols = [...theme.leaves, theme.accent];
   cols.forEach((hex, i) => set.leaves[i].value.set(hex));
+  set.leafShade.value.set(theme.leafShade);
+  set.leafLight.value.set(theme.leafLight);
   set.wood[0].value.set(theme.wood[0]);
   set.wood[1].value.set(theme.wood[1]);
   set.ground[0].value.set(theme.ground[0]);
