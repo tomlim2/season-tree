@@ -44,17 +44,30 @@ function skeleton(shape, R) {
       tips.push({ p: p.clone(), dir: d.clone(), radius });
       return;
     }
-    const count = depth === 0 ? T.splits : 2 + (R() < 0.45 ? 1 : 0);
+    // the trunk forks into two main limbs, sometimes three (a bush into three or four)
+    const count = depth === 0 ? (T.splits >= 3 ? T.splits - 1 + (R() < 0.45 ? 1 : 0) : T.splits) : 2 + (R() < 0.45 ? 1 : 0);
     const base = R() * Math.PI * 2;
     for (let i = 0; i < count; i++) {
-      const az = base + (i / count) * Math.PI * 2 + (R() - 0.5) * 0.8;
-      const spread = T.spread * (0.7 + 0.6 * R());
+      let az;
+      let spread = T.spread * (0.7 + 0.6 * R());
+      if (depth === 0 && count >= 2) {
+        // the trunk forks into a Y seen from the front: one limb to the left, one to the right,
+        // any others toward or away from the viewer and a little steeper
+        if (i < 2) az = i * Math.PI + (R() - 0.5) * 0.7;
+        else {
+          az = (R() < 0.5 ? 0.5 : 1.5) * Math.PI + (R() - 0.5) * 0.6;
+          spread *= 0.7;
+        }
+      } else {
+        az = base + (i / count) * Math.PI * 2 + (R() - 0.5) * 0.8;
+      }
       // turn away from the parent direction by `spread`, round the parent axis by `az`
       const side = new THREE.Vector3(Math.cos(az), 0, Math.sin(az));
       const nd = d.clone().multiplyScalar(Math.cos(spread)).addScaledVector(side, Math.sin(spread));
       nd.y += T.up * 0.5;
       nd.normalize();
-      grow(p, nd, length * T.falloff * (0.85 + 0.3 * R()), radius * 0.62, depth + 1);
+      // the main limbs stay thick, like the trunk; twigs thin out faster
+      grow(p, nd, length * T.falloff * (0.85 + 0.3 * R()), radius * (depth === 0 ? 0.68 : 0.6), depth + 1);
     }
   };
   const lean = new THREE.Vector3((R() - 0.5) * 0.16, 1, (R() - 0.5) * 0.16).normalize();
@@ -70,7 +83,7 @@ function skeleton(shape, R) {
       for (let i = 0; i < count; i++) {
         const az = base + (i / count) * Math.PI * 2 + (R() - 0.5) * 0.5;
         const dir = new THREE.Vector3(Math.cos(az), -0.15 + 0.1 * R(), Math.sin(az)).normalize();
-        const len = (0.22 + f * 0.75) * (0.8 + 0.4 * R());
+        const len = (0.2 + f * 0.62) * (0.8 + 0.4 * R());
         const a = new THREE.Vector3(0, h, 0);
         const b = a.clone().addScaledVector(dir, len);
         segments.push({ a, b, r0: 0.035 * (0.5 + f), r1: 0.012, depth: 1 });
@@ -78,50 +91,111 @@ function skeleton(shape, R) {
       }
     }
   }
-  return { segments, tips, joints, top };
+  // where the trunk ends (the fork), for the shadow it throws on the grass
+  const fork = joints.find((j) => j.depth === 0)?.p.y ?? T.length;
+  return { segments, tips, joints, top, fork };
 }
 
 /* ---------------------------------------------------------------- wood */
 
-// low-poly tapered tubes round every segment, merged into one mesh; aH is height for the sway
-function woodGeometry(segments) {
-  const SIDES = 7;
+// Low-poly wood: six flat faces round every segment, so the light steps from face to face the
+// way it does on the reference's trunk, and a flared root collar where the trunk meets the
+// ground. Everything is merged into one mesh; aH is height for the sway.
+function woodGeometry(segments, R) {
+  const SIDES = 6;
   const pos = [];
   const nrm = [];
   const hgt = [];
   const idx = [];
   const up = new THREE.Vector3(0, 1, 0);
-  for (const s of segments) {
-    const dir = tmp.subVectors(s.b, s.a).normalize();
+  const e1 = new THREE.Vector3();
+  const e2 = new THREE.Vector3();
+  const fn = new THREE.Vector3();
+  // one flat quad with its own four vertices and the face normal, wound to face outward
+  const quad = (a, b, c, d, outward) => {
+    fn.crossVectors(e1.subVectors(b, a), e2.subVectors(d, a)).normalize();
+    if (fn.dot(outward) < 0) fn.negate();
+    const s = pos.length / 3;
+    for (const p of [a, b, c, d]) {
+      pos.push(p.x, p.y, p.z);
+      nrm.push(fn.x, fn.y, fn.z);
+      hgt.push(p.y);
+    }
+    // front faces are counter-clockwise: flip the order if the first triangle winds the other way
+    const ccw = tmp.crossVectors(e1.subVectors(b, a), e2.subVectors(c, a)).dot(fn) > 0;
+    if (ccw) idx.push(s, s + 1, s + 2, s, s + 2, s + 3);
+    else idx.push(s, s + 2, s + 1, s, s + 3, s + 2);
+  };
+  // a frame (u, v) round a direction; the same rule for every segment keeps the faces lined up
+  const frame = (dir) => {
     const side = Math.abs(dir.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : up.clone();
     const u = new THREE.Vector3().crossVectors(dir, side).normalize();
     const v = new THREE.Vector3().crossVectors(u, dir).normalize();
-    const start = pos.length / 3;
-    // the start is pulled back a little, so joints overlap instead of gaping
-    const a = s.a.clone().addScaledVector(dir, -s.r0 * 0.6);
-    for (const [c, r] of [
-      [a, s.r0],
-      [s.b, s.r1],
-    ]) {
-      for (let i = 0; i < SIDES; i++) {
-        const t = (i / SIDES) * Math.PI * 2;
-        const n = tmp2.copy(u).multiplyScalar(Math.cos(t)).addScaledVector(v, Math.sin(t));
-        pos.push(c.x + n.x * r, c.y + n.y * r, c.z + n.z * r);
-        nrm.push(n.x, n.y, n.z);
-        hgt.push(c.y);
-      }
+    return { u, v };
+  };
+  // a ring of points round `c`; `bump(theta)` lets the root collar bulge into buttresses
+  const ring = (c, u, v, r, bump) => {
+    const out = [];
+    for (let i = 0; i < SIDES; i++) {
+      const t = ((i + 0.5) / SIDES) * Math.PI * 2;
+      const rr = r * (bump ? bump(t) : 1);
+      out.push(c.clone().addScaledVector(u, Math.cos(t) * rr).addScaledVector(v, Math.sin(t) * rr));
     }
+    return out;
+  };
+  // faces between two rings
+  const tube = (ringA, ringB, axisA, axisB) => {
     for (let i = 0; i < SIDES; i++) {
       const j = (i + 1) % SIDES;
-      idx.push(start + i, start + SIDES + i, start + j, start + j, start + SIDES + i, start + SIDES + j);
+      const outward = tmp2.copy(ringA[i]).add(ringA[j]).add(ringB[i]).add(ringB[j]).multiplyScalar(0.25).sub(tmp.copy(axisA).add(axisB).multiplyScalar(0.5));
+      quad(ringA[i], ringA[j], ringB[j], ringB[i], outward);
     }
-    // a cap at the tip
-    const cap = pos.length / 3;
-    pos.push(s.b.x, s.b.y, s.b.z);
-    nrm.push(dir.x, dir.y, dir.z);
-    hgt.push(s.b.y);
-    for (let i = 0; i < SIDES; i++) idx.push(start + SIDES + i, cap, start + SIDES + ((i + 1) % SIDES));
-  }
+  };
+  segments.forEach((s, index) => {
+    const dir = tmp.subVectors(s.b, s.a).normalize().clone();
+    const { u, v } = frame(dir);
+    // the start is pulled back a little, so joints overlap instead of gaping
+    const a = s.a.clone().addScaledVector(dir, -s.r0 * 0.6);
+    tube(ring(a, u, v, s.r0), ring(s.b, u, v, s.r1), a, s.b);
+    // a flat cap at the tip
+    const cap = ring(s.b, u, v, s.r1);
+    const c = pos.length / 3;
+    for (const p of cap) {
+      pos.push(p.x, p.y, p.z);
+      nrm.push(dir.x, dir.y, dir.z);
+      hgt.push(p.y);
+    }
+    for (let i = 1; i < SIDES - 1; i++) {
+      const ccw = e1.subVectors(cap[i], cap[0]).cross(e2.subVectors(cap[i + 1], cap[0])).dot(dir) > 0;
+      if (ccw) idx.push(c, c + i, c + i + 1);
+      else idx.push(c, c + i + 1, c + i);
+    }
+    // the root collar: the foot of the trunk flares out into the ground, with three or four
+    // buttress ridges, the way the reference's trunks spread where they meet the grass
+    if (index === 0 && s.depth === 0) {
+      const r = s.r0;
+      const phase = R() * Math.PI * 2;
+      const ridges = 3 + Math.floor(R() * 2);
+      const bumpLow = (t) => 1 + 0.22 * Math.sin(t * ridges + phase) + 0.06 * Math.sin(t * 2 + 1.7);
+      const bumpMid = (t) => 1 + 0.1 * Math.sin(t * ridges + phase);
+      // a trumpet profile: wide and lumpy in the ground, narrowing fast, then easing into the trunk
+      const at = (h) => s.a.clone().addScaledVector(dir, h - s.a.y);
+      // the top ring matches the trunk's own radius at that height, so there is no ledge
+      const heights = [-1.0, 0.5, 1.7, 3.6].map((k) => k * r);
+      const trunkAt = (h) => {
+        for (const t of segments) if (t.depth === 0 && h >= t.a.y && h <= t.b.y) return t.r0 + (t.r1 - t.r0) * ((h - t.a.y) / Math.max(t.b.y - t.a.y, 1e-6));
+        return r * 0.9;
+      };
+      const rings = [
+        ring(at(heights[0]), u, v, r * 2.3, bumpLow),
+        ring(at(heights[1]), u, v, r * 1.9, bumpLow),
+        ring(at(heights[2]), u, v, r * 1.4, bumpMid),
+        ring(at(heights[3]), u, v, trunkAt(heights[3]) * 1.005),
+      ];
+      const axis = heights.map(at);
+      for (let k = 0; k < rings.length - 1; k++) tube(rings[k], rings[k + 1], axis[k], axis[k + 1]);
+    }
+  });
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
@@ -133,10 +207,13 @@ function woodGeometry(segments) {
 /* ---------------------------------------------------------------- leaves */
 
 // each leaf: where it hangs, the centre of its clump (for shading), its turn, its size, and its
-// numbers: colour slot, phase, whether and when it falls, brightness
+// numbers: colour slot, phase, whether and when it falls, brightness.
+// Also returns `balls`: a few spheres that stand in for the canopy when the grass works out
+// where the tree's shadow falls on it.
 function leafCloud(shape, bones, R) {
   const L = shape.leaves;
   const anchors = []; // { p, c, dir?, flat }
+  const balls = []; // { c, r }
   const sphere = (centre, radius, count, shell = 0.35) => {
     for (let i = 0; i < count; i++) {
       const fluff = R() < 0.08;
@@ -158,7 +235,7 @@ function leafCloud(shape, bones, R) {
   crown.y += L.radius * (L.kind === 'willow' ? 0.7 : 0.9) * (L.crownLift ?? 1);
   const lobeCentres = [];
   const lobeRadii = [];
-  const lobes = L.lobes ?? 5 + Math.floor(R() * 3);
+  const lobes = L.kind === 'clumps' || L.kind === 'willow' ? (L.lobes ?? 5 + Math.floor(R() * 3)) : 0;
   for (let i = 0; i < lobes; i++) {
     const az = (i / lobes) * Math.PI * 2 + (R() - 0.5) * 0.9;
     const el = (R() - 0.3) * 1.2; // mostly round the sides, a couple on top
@@ -168,6 +245,7 @@ function leafCloud(shape, bones, R) {
     centre.y = Math.max(centre.y, r * 0.9 + 0.2);
     lobeCentres.push(centre);
     lobeRadii.push(r);
+    balls.push({ c: centre, r: r * 0.95 });
     const count = Math.round(L.perClump * (0.8 + 0.4 * R()));
     sphere(centre, r, count, 0.3);
     // a smaller lobe grown on its side
@@ -193,28 +271,30 @@ function leafCloud(shape, bones, R) {
       }
     });
   }
-  if (L.kind === 'clumps' || L.kind === 'willow') {
-    // nothing more: the lobes are the canopy
-  } else if (L.kind === 'cone') {
-    const centre = new THREE.Vector3(0, L.height * 0.45, 0);
+  if (L.kind === 'cone') {
     for (let i = 0; i < L.count; i++) {
       const h = Math.pow(R(), 0.8) * L.height;
       // tiers: the needles gather in bands, thinner between them
       if (R() > 0.55 + 0.45 * Math.sin(h * 4.2)) continue;
       const f = 1 - h / L.height; // wide at the bottom
-      const r = L.radius * f * (0.55 + 0.45 * Math.pow(R(), 0.4));
+      const r = L.radius * f * (0.6 + 0.5 * Math.pow(R(), 0.4));
       const th = R() * Math.PI * 2;
       anchors.push({ p: new THREE.Vector3(r * Math.cos(th), 0.4 + h, r * Math.sin(th)), c: new THREE.Vector3(0, 0.4 + h, 0), needle: true });
     }
-    void centre;
+    // a stack of balls stands in for the cone
+    for (const f of [0.12, 0.34, 0.56, 0.78]) {
+      const h = 0.4 + f * L.height;
+      balls.push({ c: new THREE.Vector3(0, h, 0), r: L.radius * (1 - f) * 0.95 });
+    }
   } else if (L.kind === 'column') {
+    const taper = (y) => Math.sin(Math.PI * Math.pow(y, 0.9)) * 0.75 + 0.25;
     for (let i = 0; i < L.count; i++) {
       const y = R();
-      const taper = Math.sin(Math.PI * Math.pow(y, 0.9)) * 0.75 + 0.25;
-      const r = L.radius * taper * (0.6 + 0.4 * Math.pow(R(), 0.4));
+      const r = L.radius * taper(y) * (0.6 + 0.4 * Math.pow(R(), 0.4));
       const th = R() * Math.PI * 2;
       anchors.push({ p: new THREE.Vector3(r * Math.cos(th), 0.3 + y * L.height, r * Math.sin(th)), c: new THREE.Vector3(0, 0.3 + y * L.height, 0) });
     }
+    for (const y of [0.15, 0.4, 0.62, 0.84]) balls.push({ c: new THREE.Vector3(0, 0.3 + y * L.height, 0), r: L.radius * taper(y) });
   }
   const n = anchors.length;
   const pos = new Float32Array(n * 3);
@@ -259,9 +339,9 @@ function leafCloud(shape, bones, R) {
     const height = (a.p.y - lo) / Math.max(hi - lo, 0.01);
     const out = tmp.subVectors(a.p, a.c);
     const depth = Math.min(out.length() / Math.max(a.r || 1, 0.01), 1.2);
-    const n = out.lengthSq() > 1e-6 ? out.normalize() : tmp.set(0, 1, 0);
-    if (a.needle || a.strand) n.y += 0.5;
-    const lambert = n.dot(SUN);
+    const nn = out.lengthSq() > 1e-6 ? out.normalize() : tmp.set(0, 1, 0);
+    if (a.needle || a.strand) nn.y += 0.5;
+    const lambert = nn.dot(SUN);
     let lit = 0.12 + 0.88 * Math.max(0, Math.min(1, (lambert + 0.55) / 1.35));
     lit *= 0.55 + 0.45 * Math.min(depth / 0.8, 1);
     lit = Math.max(0, Math.min(1, lit + 0.12 * (height - 0.5)));
@@ -270,34 +350,37 @@ function leafCloud(shape, bones, R) {
     data.set([slot, R(), falls ? 0.3 + 0.7 * R() : 0, lit], i * 4);
   });
   const geo = new THREE.InstancedBufferGeometry();
-  const quad = new THREE.PlaneGeometry(1, 1);
-  geo.index = quad.index;
-  geo.setAttribute('position', quad.getAttribute('position'));
-  geo.setAttribute('uv', quad.getAttribute('uv'));
+  const plane = new THREE.PlaneGeometry(1, 1);
+  geo.index = plane.index;
+  geo.setAttribute('position', plane.getAttribute('position'));
+  geo.setAttribute('uv', plane.getAttribute('uv'));
   geo.setAttribute('aPos', new THREE.InstancedBufferAttribute(pos, 3));
   geo.setAttribute('aCentre', new THREE.InstancedBufferAttribute(cen, 3));
   geo.setAttribute('aQuat', new THREE.InstancedBufferAttribute(quat, 4));
   geo.setAttribute('aSize', new THREE.InstancedBufferAttribute(size, 2));
   geo.setAttribute('aData', new THREE.InstancedBufferAttribute(data, 4));
   geo.instanceCount = n;
-  return { geometry: geo, count: n, top: hi };
+  return { geometry: geo, count: n, top: hi, balls };
 }
 
 /* ---------------------------------------------------------------- ground */
 
-// a flat island with a scalloped edge, a thin side, and a fringe of grass blades
+// A flat island with a scalloped edge and a thin side, covered in a carpet of short grass
+// blades: thousands of little triangles, so the island's silhouette is fuzzy all the way round
+// and the ground reads as a shaggy mat, as in the reference.
 export function groundGeometry(R) {
   const N = 64;
-  const radius = (t) => 2.1 + 0.42 * Math.sin(t * 3 + R() * 0.3) + 0.25 * Math.sin(t * 7 + 1.3) + 0.12 * Math.sin(t * 13 + 2.1);
+  const DEPTH = 0.78; // the island is a little wider (x) than it is deep (z)
+  const radius = (t) => 1.6 + 0.3 * Math.sin(t * 3 + R() * 0.3) + 0.18 * Math.sin(t * 7 + 1.3) + 0.09 * Math.sin(t * 13 + 2.1);
   const rim = [];
   for (let i = 0; i < N; i++) {
     const t = (i / N) * Math.PI * 2;
     const r = radius(t);
-    rim.push([Math.cos(t) * r, Math.sin(t) * r]);
+    rim.push([Math.cos(t) * r, Math.sin(t) * r * DEPTH]);
   }
   const pos = [];
   const nrm = [];
-  const kind = []; // 0 top, 1 side, 2 grass
+  const kind = []; // 0 top, 1 side, 2..3 grass (the fraction is the blade's own shade)
   const idx = [];
   // top: a fan
   pos.push(0, 0, 0);
@@ -310,7 +393,7 @@ export function groundGeometry(R) {
   }
   for (let i = 0; i < N; i++) idx.push(0, 1 + ((i + 1) % N), 1 + i);
   // side
-  const THICK = 0.22;
+  const THICK = 0.14;
   const sideStart = pos.length / 3;
   for (let i = 0; i < N; i++) {
     const [x, z] = rim[i];
@@ -324,26 +407,34 @@ export function groundGeometry(R) {
     const b = sideStart + ((i + 1) % N) * 2;
     idx.push(a, b, a + 1, a + 1, b, b + 1);
   }
-  // grass: small blades leaning outward along the rim
-  const GRASS = 220;
-  for (let i = 0; i < GRASS; i++) {
-    const t = R() * Math.PI * 2;
-    const r = radius(t) - R() * 0.35;
-    const x = Math.cos(t) * r;
-    const z = Math.sin(t) * r;
-    const h = 0.14 + 0.16 * R();
-    const w = 0.05 + 0.04 * R();
-    const lean = 0.08 * R();
-    const ox = Math.cos(t) * lean;
-    const oz = Math.sin(t) * lean;
+  // grass: a blade is one triangle, standing with a little lean
+  const blade = (x, z, h, w, leanX, leanZ) => {
     const ang = R() * Math.PI;
     const dx = Math.cos(ang) * w;
     const dz = Math.sin(ang) * w;
     const s = pos.length / 3;
-    pos.push(x - dx, 0, z - dz, x + dx, 0, z + dz, x + ox, h, z + oz);
+    const shade = 2 + R() * 0.999;
+    pos.push(x - dx, 0, z - dz, x + dx, 0, z + dz, x + leanX, h, z + leanZ);
     nrm.push(0, 1, 0, 0, 1, 0, 0, 1, 0);
-    kind.push(2, 2, 2);
+    kind.push(shade, shade, shade);
     idx.push(s, s + 1, s + 2);
+  };
+  // the carpet, spread evenly over the top
+  const CARPET = 6000;
+  for (let i = 0; i < CARPET; i++) {
+    const t = R() * Math.PI * 2;
+    const r = (radius(t) - 0.08) * Math.sqrt(R());
+    const lean = 0.06 * R();
+    const la = R() * Math.PI * 2;
+    blade(Math.cos(t) * r, Math.sin(t) * r * DEPTH, 0.06 + 0.1 * R(), 0.018 + 0.02 * R(), Math.cos(la) * lean, Math.sin(la) * lean);
+  }
+  // the fringe: taller blades along the rim, leaning outward, so the edge is shaggy
+  const FRINGE = 900;
+  for (let i = 0; i < FRINGE; i++) {
+    const t = R() * Math.PI * 2;
+    const r = radius(t) - R() * 0.25;
+    const lean = 0.05 + 0.1 * R();
+    blade(Math.cos(t) * r, Math.sin(t) * r * DEPTH, 0.09 + 0.12 * R(), 0.022 + 0.025 * R(), Math.cos(t) * lean, Math.sin(t) * lean);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -358,7 +449,14 @@ export function groundGeometry(R) {
 export function buildTree(shape, seed) {
   const R = seeded(seed);
   const bones = skeleton(shape, R);
-  const wood = woodGeometry(bones.segments);
+  const wood = woodGeometry(bones.segments, R);
   const leaves = leafCloud(shape, bones, R);
-  return { wood, leaves: leaves.geometry, leafCount: leaves.count, top: Math.max(bones.top, leaves.top) };
+  return {
+    wood,
+    leaves: leaves.geometry,
+    leafCount: leaves.count,
+    top: Math.max(bones.top, leaves.top),
+    balls: leaves.balls,
+    trunk: { radius: shape.trunk.radius, fork: bones.fork },
+  };
 }

@@ -2,7 +2,7 @@
 import * as THREE from 'three/webgpu';
 import { THEMES, SHAPES } from './themes.js';
 import { buildTree, groundGeometry, seeded } from './tree.js';
-import { createUniforms, setSeason, WIPE_SPAN, WIPE_START } from './tsl/common.js';
+import { createUniforms, setSeason, setTree, WIPE_SPAN, WIPE_START } from './tsl/common.js';
 import { leafMaterial, leafShadowMaterial } from './tsl/leaves.js';
 import { woodMaterial, woodShadowMaterial, groundMaterial } from './tsl/wood.js';
 
@@ -93,6 +93,7 @@ export async function createScene(host, hooks = {}) {
     }
     const built = buildTree(SHAPES[shape], seed);
     u.top.value = built.top;
+    setTree(u, built);
     leafCount = built.leafCount;
     const woodShadow = new THREE.Mesh(built.wood, materials.woodShadow);
     const leafShadow = new THREE.Mesh(built.leaves, materials.leafShadow);
@@ -214,6 +215,7 @@ export async function createScene(host, hooks = {}) {
       uniforms: u,
       camera,
       look,
+      target,
       get leafCount() {
         return leafCount;
       },
@@ -222,6 +224,10 @@ export async function createScene(host, hooks = {}) {
       },
       set time(v) {
         t = v;
+      },
+      // advance by hand, for checking frames when the page is not being shown
+      step(dt = 1 / 60) {
+        tick(dt);
       },
     },
     dispose() {

@@ -1,9 +1,10 @@
 // What every material of the tree shares: the wind, the season's colours and the wipe between
-// two seasons, the light, and a few quaternion helpers.
+// two seasons, the light, the shape of the tree's shadow, and a few quaternion helpers.
 import * as THREE from 'three/webgpu';
-import { uniform, float, vec3, vec4, cross, select, smoothstep, mix, sin, screenUV, int } from 'three/tsl';
+import { Fn, Loop, uniform, uniformArray, float, vec2, vec3, vec4, cross, dot, length, abs, select, smoothstep, step, mix, sin, screenUV, int } from 'three/tsl';
 
 export const SUN = new THREE.Vector3(1, 0.72, 0.3).normalize(); // toward the sun: on the right, a third of the way up
+export const BALLS = 8; // how many spheres may stand in for the canopy
 
 // a set of colour uniforms for one season; two sets are kept, the old and the new, and the wipe
 // slides from one to the other across the screen
@@ -26,6 +27,10 @@ export function createUniforms() {
     top: uniform(4), // how tall the tree is, for the bend
     sun: uniform(SUN.clone()),
     wipe: uniform(1), // 0 start .. 1 done
+    // the canopy as a few balls (x, y, z, radius; radius 0 = unused) and the trunk
+    // (radius, height of the fork), for the shadow the grass works out for itself
+    balls: uniformArray(Array.from({ length: BALLS }, () => new THREE.Vector4(0, 0, 0, 0))),
+    trunk: uniform(new THREE.Vector4(0.16, 1.5, 0, 0)),
     old: seasonUniforms(),
     now: seasonUniforms(),
   };
@@ -42,6 +47,16 @@ export function setSeason(set, theme) {
   set.ground[0].value.set(theme.ground[0]);
   set.ground[1].value.set(theme.ground[1]);
   set.shadow.value.set(theme.shadow);
+}
+
+// tells the uniforms what tree is standing now, for its shadow on the grass
+export function setTree(u, built) {
+  u.balls.array.forEach((b, i) => {
+    const ball = built.balls[i];
+    if (ball) b.set(ball.c.x, ball.c.y, ball.c.z, ball.r);
+    else b.set(0, 0, 0, 0);
+  });
+  u.trunk.value.set(built.trunk.radius, built.trunk.fork, 0, 0);
 }
 
 // the wipe runs from the top right corner to the bottom left; `v` is 0 at the top right, 2 at the
@@ -85,3 +100,30 @@ export const toGround = (u, p) => {
   const q = p.sub(l.mul(p.y.div(l.y)));
   return vec3(q.x, 0.012, q.z);
 };
+
+// How much of the tree's shadow falls on a point of the ground (0 none .. 1 full). The leaves'
+// own shadows are drawn as cards and would hide under the grass; so the grass asks instead
+// whether the line from this point toward the sun passes through one of the canopy's balls or
+// through the trunk. Soft at the edges, and it grows in with the tree.
+export const treeShade = (u, p) =>
+  Fn(() => {
+    const L = u.sun;
+    const total = float(0.0).toVar();
+    Loop(BALLS, ({ i }) => {
+      const b = u.balls.element(i);
+      const v = b.xyz.sub(p);
+      const t = dot(v, L);
+      const d = length(v.sub(L.mul(t)));
+      const hit = smoothstep(b.w, b.w.mul(0.72), d).mul(step(0.0, t)).mul(step(0.001, b.w));
+      total.addAssign(hit);
+    });
+    // the trunk: a vertical post throws a strip of shadow from its foot away from the sun
+    const r = u.trunk.x;
+    const w = vec2(L.x, L.z).negate().normalize();
+    const len = u.trunk.y.mul(length(vec2(L.x, L.z))).div(L.y);
+    const along = dot(p.xz, w);
+    const across = abs(dot(p.xz, vec2(w.y.negate(), w.x)));
+    const post = smoothstep(r.mul(1.15), r.mul(0.6), across).mul(smoothstep(r.negate().mul(1.5), r.negate().mul(0.3), along)).mul(smoothstep(len.add(r), len.sub(r.mul(0.5)), along));
+    total.addAssign(post);
+    return total.clamp(0.0, 1.0).mul(smoothstep(0.3, 1.8, u.grow));
+  })();
