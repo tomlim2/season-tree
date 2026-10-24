@@ -81,7 +81,7 @@ export function leafShadowMaterial(u) {
   m.positionNode = toGround(u, leafPlacement(u));
   m.fragmentNode = Fn(() => {
     oval();
-    return vec4(seasonal(u, (s) => s.shadow), 0.3);
+    return vec4(seasonal(u, (s) => s.shadow), 0.5);
   })();
   return m;
 }

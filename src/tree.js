@@ -67,7 +67,7 @@ function skeleton(shape, R) {
       for (let i = 0; i < count; i++) {
         const az = base + (i / count) * Math.PI * 2 + (R() - 0.5) * 0.5;
         const dir = new THREE.Vector3(Math.cos(az), -0.15 + 0.1 * R(), Math.sin(az)).normalize();
-        const len = (0.3 + f * 1.0) * (0.8 + 0.4 * R());
+        const len = (0.22 + f * 0.75) * (0.8 + 0.4 * R());
         const a = new THREE.Vector3(0, h, 0);
         const b = a.clone().addScaledVector(dir, len);
         segments.push({ a, b, r0: 0.035 * (0.5 + f), r1: 0.012, depth: 1 });

@@ -25,7 +25,7 @@ export function woodShadowMaterial(u) {
   m.transparent = true;
   m.depthWrite = false;
   m.positionNode = toGround(u, bent(u));
-  m.fragmentNode = Fn(() => vec4(seasonal(u, (s) => s.shadow), 0.38))();
+  m.fragmentNode = Fn(() => vec4(seasonal(u, (s) => s.shadow), 0.6))();
   return m;
 }
 

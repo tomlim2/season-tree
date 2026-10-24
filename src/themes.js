@@ -10,7 +10,7 @@ export const THEMES = [
     wood: ['#b7b0c8', '#7f7595'],
     leaves: ['#f7b1ca', '#f28cb2', '#d890c4', '#fbd3e0'],
     accent: '#8fd3c9',
-    shadow: '#5c5668',
+    shadow: '#8f8899',
   },
   {
     id: 'summer',
@@ -20,7 +20,7 @@ export const THEMES = [
     wood: ['#a07f63', '#6f5545'],
     leaves: ['#b6e872', '#70cf82', '#44b7a2', '#dff07c'],
     accent: '#2f9e8f',
-    shadow: '#4d5668',
+    shadow: '#7f8aa0',
   },
   {
     id: 'autumn',
@@ -30,7 +30,7 @@ export const THEMES = [
     wood: ['#7d5b47', '#553a2d'],
     leaves: ['#f8a93c', '#f08236', '#ffd56e', '#e86d3f'],
     accent: '#c94d2a',
-    shadow: '#5c4b45',
+    shadow: '#a08a78',
   },
   {
     id: 'winter',
@@ -40,7 +40,7 @@ export const THEMES = [
     wood: ['#5d6879', '#3b4553'],
     leaves: ['#ffffff', '#ebf4fa', '#d4e6f2', '#bcd8eb'],
     accent: '#a6cbe6',
-    shadow: '#3c506c',
+    shadow: '#7c94b4',
   },
   {
     id: 'night',
@@ -50,7 +50,7 @@ export const THEMES = [
     wood: ['#121f39', '#0a1328'],
     leaves: ['#3094a7', '#237090', '#3aaebe', '#56c7d0'],
     accent: '#7fd9df',
-    shadow: '#0b1430',
+    shadow: '#0c1736',
   },
 ];
 
@@ -66,7 +66,7 @@ export const SHAPES = [
     id: 'conifer',
     name: '침엽수',
     trunk: { length: 1.2, radius: 0.13, splits: 1, spread: 0.0, falloff: 1.0, depth: 1, up: 1.0, wobble: 0.03, whorls: 9, cone: 1.5 },
-    leaves: { kind: 'cone', height: 4.6, radius: 1.5, count: 6500, aspect: 0.3, size: 0.16 },
+    leaves: { kind: 'cone', height: 4.6, radius: 1.5, count: 8500, aspect: 0.3, size: 0.16 },
   },
   {
     id: 'column',
