@@ -70,7 +70,7 @@ export const SHAPES = [
     id: 'round',
     name: '둥근 나무',
     trunk: { length: 1.5, radius: 0.16, splits: 3, spread: 0.55, falloff: 0.72, depth: 3, up: 0.35, wobble: 0.18 },
-    leaves: { kind: 'clumps', lobes: 6, radius: 1.2, lobeSpread: 0.85, perClump: 1500, aspect: 0.75, size: 0.14 },
+    leaves: { kind: 'clumps', lobes: 6, radius: 1.2, lobeSpread: 0.85, perClump: 1900, aspect: 0.78, size: 0.155 },
   },
   {
     id: 'conifer',
@@ -82,18 +82,18 @@ export const SHAPES = [
     id: 'column',
     name: '기둥 나무',
     trunk: { length: 1.0, radius: 0.1, splits: 1, spread: 0.0, falloff: 1.0, depth: 1, up: 1.0, wobble: 0.02 },
-    leaves: { kind: 'column', height: 4.4, radius: 0.72, count: 7000, aspect: 0.45, size: 0.12 },
+    leaves: { kind: 'column', height: 4.4, radius: 0.72, count: 8500, aspect: 0.45, size: 0.13 },
   },
   {
     id: 'willow',
     name: '수양버들',
     trunk: { length: 1.7, radius: 0.15, splits: 3, spread: 0.7, falloff: 0.7, depth: 3, up: 0.25, wobble: 0.2 },
-    leaves: { kind: 'willow', lobes: 5, radius: 0.95, lobeSpread: 0.8, perClump: 700, strands: 14, drop: 2.6, aspect: 0.4, size: 0.105 },
+    leaves: { kind: 'willow', lobes: 5, radius: 0.95, lobeSpread: 0.8, perClump: 850, strands: 14, drop: 2.6, aspect: 0.4, size: 0.115 },
   },
   {
     id: 'bush',
     name: '덤불',
     trunk: { length: 0.4, radius: 0.1, splits: 4, spread: 0.95, falloff: 0.65, depth: 2, up: 0.15, wobble: 0.2 },
-    leaves: { kind: 'clumps', lobes: 7, radius: 1.0, lobeSpread: 1.0, flat: 0.45, crownLift: 0.3, perClump: 1300, aspect: 0.7, size: 0.12 },
+    leaves: { kind: 'clumps', lobes: 7, radius: 1.0, lobeSpread: 1.0, flat: 0.45, crownLift: 0.3, perClump: 1600, aspect: 0.72, size: 0.13 },
   },
 ];

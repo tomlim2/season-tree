@@ -1,9 +1,9 @@
 // The leaves: thousands of small cards. The vertex stage hangs each one on its branch, sways it
 // in the wind, and for the few that are marked to fall, flies it off to the left, lays it on the
 // ground, lets it fade and grows it back. The fragment stage paints a flat seasonal colour and
-// cuts the card into an oval.
+// cuts the card into a petal with a soft edge.
 import * as THREE from 'three/webgpu';
-import { Fn, If, Discard, attribute, positionGeometry, uv, float, vec3, vec4, length, mix, sin, cos, fract, smoothstep, max } from 'three/tsl';
+import { Fn, If, Discard, attribute, positionGeometry, uv, float, vec2, vec3, vec4, length, mix, sin, cos, fract, floor, smoothstep, max } from 'three/tsl';
 import { seasonal, pick, bendAt, qRotate, qMul, qAxis, toGround } from './common.js';
 
 // where a leaf is right now, how big, and how it is turned: shared by the leaves and their shadows
@@ -54,27 +54,40 @@ const leafPlacement = (u) =>
   return pos.add(qRotate(rot, local));
   })();
 
-const oval = () => {
-  If(length(uv().sub(0.5)).greaterThan(0.5), () => {
+// The leaf's shape: a petal, round at the stem and narrowing to the tip, with a soft edge.
+// Returns how far inside the petal this pixel is (0 edge .. 1 centre) and its coverage.
+const petal = () => {
+  const p = uv().sub(0.5);
+  const q = vec2(p.x, p.y.div(float(1.0).sub(p.x.add(0.5).mul(0.42))));
+  const d = length(q).mul(2.0);
+  const cover = smoothstep(1.0, 0.88, d);
+  If(cover.lessThan(0.02), () => {
     Discard();
   });
+  return { d, cover, p };
 };
 
 export function leafMaterial(u) {
   const m = new THREE.NodeMaterial();
   m.side = THREE.DoubleSide;
+  m.alphaToCoverage = true; // soft edges through the multisample mask, no sorting needed
   m.positionNode = leafPlacement(u);
   m.fragmentNode = Fn(() => {
-    oval();
+    const { d, cover, p } = petal();
     const data = attribute('aData', 'vec4'); // colour slot, phase, fall, light (0 shadow .. 1 lit)
     const lit = data.w;
+    // each leaf's own colour sits between two of the season's colours, so no two are quite alike
+    const second = floor(fract(data.y.mul(5.13)).mul(4.0));
+    const blend = fract(data.y.mul(3.71)).mul(0.5);
     const col = seasonal(u, (s) => {
-      const base = pick(data.x, s.leaves);
+      const base = mix(pick(data.x, s.leaves), pick(second, s.leaves), blend);
       return mix(s.leafShade, mix(base, s.leafLight, smoothstep(0.62, 1.0, lit).mul(0.8)), smoothstep(0.0, 0.7, lit));
-    });
-    // a little scatter from leaf to leaf, so a lobe is never a flat gradient
-    const jitter = fract(data.y.mul(7.31)).mul(0.14).add(0.93);
-    return vec4(col.mul(jitter), 1.0);
+    }).toVar();
+    // a little scatter from leaf to leaf, a gentle wash from stem to tip, and a lighter rim
+    col.mulAssign(fract(data.y.mul(7.31)).mul(0.14).add(0.93));
+    col.mulAssign(p.x.add(0.5).mul(0.16).add(0.92));
+    col.mulAssign(smoothstep(0.55, 1.0, d).mul(0.1).add(1.0));
+    return vec4(col, cover);
   })();
   return m;
 }
@@ -86,8 +99,8 @@ export function leafShadowMaterial(u) {
   m.depthWrite = false;
   m.positionNode = toGround(u, leafPlacement(u));
   m.fragmentNode = Fn(() => {
-    oval();
-    return vec4(seasonal(u, (s) => s.shadow), 0.5);
+    const { cover } = petal();
+    return vec4(seasonal(u, (s) => s.shadow), cover.mul(0.5));
   })();
   return m;
 }

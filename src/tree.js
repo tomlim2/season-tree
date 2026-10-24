@@ -139,11 +139,12 @@ function leafCloud(shape, bones, R) {
   const anchors = []; // { p, c, dir?, flat }
   const sphere = (centre, radius, count, shell = 0.35) => {
     for (let i = 0; i < count; i++) {
-      const r = radius * Math.pow(R(), shell) * (R() < 0.08 ? 1.0 + 0.18 * R() : 1.0);
+      const fluff = R() < 0.08;
+      const r = radius * Math.pow(R(), shell) * (fluff ? 1.0 + 0.18 * R() : 1.0);
       const th = R() * Math.PI * 2;
       const ph = Math.acos(2 * R() - 1);
       const p = new THREE.Vector3(centre.x + r * Math.sin(ph) * Math.cos(th), centre.y + r * Math.cos(ph) * 0.85, centre.z + r * Math.sin(ph) * Math.sin(th));
-      anchors.push({ p, c: centre, r: radius });
+      anchors.push({ p, c: centre, r: radius, fluff });
     }
   };
   // the crown: a handful of cotton-ball lobes set round a centre above the fork of the trunk,
@@ -251,7 +252,7 @@ function leafCloud(shape, bones, R) {
       q.setFromEuler(e);
       quat.set([q.x, q.y, q.z, q.w], i * 4);
     }
-    const s = L.size * (0.7 + 0.6 * R());
+    const s = L.size * (0.7 + 0.6 * R()) * (a.fluff ? 1.35 : 1.0);
     size.set([s, s * L.aspect * (0.8 + 0.4 * R())], i * 2);
     // light: each lobe is shaded as a ball by the sun (bright on the upper right, the shadow
     // colour on the lower left), darker deep inside the lobe, a touch lighter near the crown
