@@ -84,10 +84,10 @@ function skeleton(shape, R) {
       for (let i = 0; i < count; i++) {
         const az = base + (i / count) * Math.PI * 2 + (R() - 0.5) * 0.5;
         const dir = new THREE.Vector3(Math.cos(az), -0.15 + 0.1 * R(), Math.sin(az)).normalize();
-        const len = (0.2 + f * 0.62) * (0.8 + 0.4 * R());
+        const len = (0.06 + f * 0.28) * (0.8 + 0.4 * R()); // stubs: the needle tufts hide them, as the reference hides its branches
         const a = new THREE.Vector3(0, h, 0);
         const b = a.clone().addScaledVector(dir, len);
-        segments.push({ a, b, r0: 0.035 * (0.5 + f), r1: 0.012, depth: 1 });
+        segments.push({ a, b, r0: 0.026 * (0.5 + f), r1: 0.01, depth: 1 });
         tips.push({ p: b, dir, radius: 0.03 });
       }
     }
@@ -273,29 +273,71 @@ function leafCloud(shape, bones, R) {
     });
   }
   if (L.kind === 'cone') {
-    for (let i = 0; i < L.count; i++) {
-      const h = Math.pow(R(), 0.8) * L.height;
-      // tiers: the needles gather in bands, thinner between them
-      if (R() > 0.55 + 0.45 * Math.sin(h * 4.2)) continue;
-      const f = 1 - h / L.height; // wide at the bottom
-      const r = L.radius * f * (0.6 + 0.5 * Math.pow(R(), 0.4));
-      const th = R() * Math.PI * 2;
-      anchors.push({ p: new THREE.Vector3(r * Math.cos(th), 0.4 + h, r * Math.sin(th)), c: new THREE.Vector3(0, 0.4 + h, 0), needle: true });
+    // A fir: tufts of long needles, each tuft a fan of seven to thirteen needles from one point,
+    // like the reference's brush splats. The tufts lie on the cone's surface (a few just inside)
+    // in tiers, denser lower down where the cone is wide, pointing outward and a little down the
+    // way boughs hang; the needles get shorter toward the spire
+    const BASE = 0.4;
+    const tiers = L.tiers ?? 9;
+    const coneR = (f) => Math.max(0.12, L.radius * (1 - f));
+    for (let i = 0; i < L.tufts; i++) {
+      // most tufts follow the width of the cone (denser low down), the rest spread evenly so the
+      // spire is not bare; two thirds gather into tiers that overlap, a third fall between them
+      const f0 = R() < 0.7 ? 1 - Math.sqrt(R()) : R();
+      const tiered = R() < 0.66;
+      const f = Math.max(0, Math.min(1, tiered ? Math.round(f0 * tiers) / tiers + ((R() - 0.5) * 0.9) / tiers : f0));
+      const h = BASE + f * L.height;
+      // on the surface, except one tuft in seven that sits deep inside and hides the trunk
+      const inner = R() < 0.15;
+      const r = coneR(f) * (inner ? 0.15 + 0.4 * R() : 0.72 + 0.33 * R());
+      const az = R() * Math.PI * 2;
+      const centre = new THREE.Vector3(Math.cos(az) * r, h, Math.sin(az) * r);
+      const axis = new THREE.Vector3(0, h, 0);
+      // most tufts point out from the trunk; a fifth point any which way, so the middle is not bare
+      const yaw = inner || R() < 0.2 ? R() * Math.PI * 2 : az + (R() - 0.5) * 1.1;
+      const dir = new THREE.Vector3(Math.cos(yaw), -(0.1 + 0.55 * R()), Math.sin(yaw)).normalize();
+      const side = new THREE.Vector3(-Math.sin(yaw), 0, Math.cos(yaw));
+      const lift = new THREE.Vector3().crossVectors(side, dir).normalize();
+      const n = 7 + Math.floor(R() * 7);
+      const litBias = (R() - 0.5) * 0.34; // whole tufts turn light or dark, as in the reference
+      const len = L.size * (0.45 + 0.55 * (1 - f)) * (0.75 + 0.5 * R());
+      for (let k = 0; k < n; k++) {
+        const fan = (R() - 0.5) * 1.7;
+        const nd = dir.clone().multiplyScalar(Math.cos(fan)).addScaledVector(side, Math.sin(fan)).addScaledVector(lift, (R() - 0.5) * 0.5).normalize();
+        const s = len * (0.8 + 0.4 * R());
+        anchors.push({ p: centre.clone().addScaledVector(nd, s * 0.45), c: axis, needle: true, dir: nd, size: s, litBias });
+      }
     }
     // a stack of balls stands in for the cone
     for (const f of [0.12, 0.34, 0.56, 0.78]) {
-      const h = 0.4 + f * L.height;
+      const h = BASE + f * L.height;
       balls.push({ c: new THREE.Vector3(0, h, 0), r: L.radius * (1 - f) * 0.95 });
     }
   } else if (L.kind === 'column') {
-    const taper = (y) => Math.sin(Math.PI * Math.pow(y, 0.9)) * 0.75 + 0.25;
+    // A cypress: a tall column whose profile is drawn afresh for every tree. The top may close
+    // as a round dome or stay wide to a nearly square shoulder (a superellipse of varying
+    // power), the body may be straight or a little barrelled, the foot pinched or full
+    const topPower = 1.4 + 5 * Math.pow(R(), 1.5); // 1.4 a dome .. 6.4 a flat top
+    const topFrom = 0.55 + 0.3 * R(); // where the top starts to close
+    const footMin = 0.3 + 0.5 * R(); // how narrow the foot is
+    const footTo = 0.08 + 0.3 * R(); // how high the foot's taper reaches
+    const bulge = -0.05 + 0.3 * R(); // the barrel
+    const width = L.radius * (0.85 + 0.3 * R());
+    const profile = (y) => {
+      const t = Math.max(0, (y - topFrom) / (1 - topFrom));
+      const top = Math.pow(Math.max(0, 1 - Math.pow(t, topPower)), 1 / topPower);
+      const foot = footMin + (1 - footMin) * smooth01(y / footTo);
+      return Math.max(0.05, top * foot * (1 + bulge * Math.sin(Math.PI * y)));
+    };
     for (let i = 0; i < L.count; i++) {
       const y = R();
-      const r = L.radius * taper(y) * (0.6 + 0.4 * Math.pow(R(), 0.4));
+      const pr = profile(y);
+      if (R() > pr) continue; // as many leaves per bit of surface where it is narrow as where it is wide
+      const r = width * pr * (0.7 + 0.3 * Math.sqrt(R()));
       const th = R() * Math.PI * 2;
       anchors.push({ p: new THREE.Vector3(r * Math.cos(th), 0.3 + y * L.height, r * Math.sin(th)), c: new THREE.Vector3(0, 0.3 + y * L.height, 0) });
     }
-    for (const y of [0.15, 0.4, 0.62, 0.84]) balls.push({ c: new THREE.Vector3(0, 0.3 + y * L.height, 0), r: L.radius * taper(y) });
+    for (const y of [0.15, 0.4, 0.62, 0.84]) balls.push({ c: new THREE.Vector3(0, 0.3 + y * L.height, 0), r: width * profile(y) });
   }
   const n = anchors.length;
   const pos = new Float32Array(n * 3);
@@ -314,10 +356,17 @@ function leafCloud(shape, bones, R) {
   anchors.forEach((a, i) => {
     pos.set([a.p.x, a.p.y, a.p.z], i * 3);
     cen.set([a.c.x, a.c.y, a.c.z], i * 3);
-    if (a.needle) {
-      // needles lie along the branch, fanned a little
-      const az = Math.atan2(a.p.x, a.p.z);
-      e.set((R() - 0.5) * 0.8, az + (R() - 0.5) * 0.6, Math.PI / 2 + (R() - 0.5) * 0.6);
+    if (a.dir) {
+      // a needle lies along its tuft's direction, its face turned outward so the fan shows
+      const x = a.dir;
+      const outward = tmp2.subVectors(a.p, a.c);
+      outward.y = 0;
+      if (outward.lengthSq() < 1e-6) outward.set(1, 0, 0);
+      outward.normalize();
+      const z = outward.clone().addScaledVector(x, -outward.dot(x)).normalize();
+      const y = new THREE.Vector3().crossVectors(z, x).normalize();
+      q.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+      quat.set([q.x, q.y, q.z, q.w], i * 4);
     } else if (a.strand) {
       e.set((R() - 0.5) * 0.4, R() * Math.PI * 2, Math.PI / 2 + (R() - 0.5) * 0.3);
     } else {
@@ -329,11 +378,11 @@ function leafCloud(shape, bones, R) {
       q.multiply(tilt);
       quat.set([q.x, q.y, q.z, q.w], i * 4);
     }
-    if (a.needle || a.strand) {
+    if (a.strand) {
       q.setFromEuler(e);
       quat.set([q.x, q.y, q.z, q.w], i * 4);
     }
-    const s = L.size * (0.7 + 0.6 * R()) * (a.fluff ? 1.25 : 1.0);
+    const s = (a.size ?? L.size * (0.7 + 0.6 * R())) * (a.fluff ? 1.25 : 1.0);
     size.set([s, s * L.aspect * (0.8 + 0.4 * R())], i * 2);
     // light: each lobe is shaded as a ball by the sun (bright on the upper right, the shadow
     // colour on the lower left), darker deep inside the lobe, a touch lighter near the crown
@@ -354,7 +403,7 @@ function leafCloud(shape, bones, R) {
       if (dd < 0.95) crevice += 1 - dd / 0.95;
     }
     lit *= 1 - Math.min(crevice, 1) * 0.55;
-    lit = Math.max(0, Math.min(1, lit + 0.12 * (height - 0.5)));
+    lit = Math.max(0, Math.min(1, lit + 0.12 * (height - 0.5) + (a.litBias ?? 0)));
     const slot = R() < 0.015 ? 4 : Math.floor(R() * 4); // the fifth slot is the rare accent colour
     const falls = R() < 0.06 ? 1 : 0;
     data.set([slot, R(), falls ? 0.3 + 0.7 * R() : 0, lit], i * 4);

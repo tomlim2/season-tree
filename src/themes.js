@@ -95,14 +95,14 @@ export const SHAPES = [
   {
     id: 'conifer',
     name: '침엽수',
-    trunk: { length: 1.2, radius: 0.13, splits: 1, spread: 0.0, falloff: 1.0, depth: 1, up: 1.0, wobble: 0.03, whorls: 9, cone: 1.5 },
-    leaves: { kind: 'cone', height: 4.6, radius: 1.5, count: 22000, aspect: 0.2, size: 0.12, needle: true },
+    trunk: { length: 0.6, radius: 0.13, splits: 1, spread: 0.0, falloff: 1.0, depth: 1, up: 1.0, wobble: 0.03, whorls: 9, cone: 1.5 }, // a short trunk: only its foot shows below the boughs
+    leaves: { kind: 'cone', height: 4.6, radius: 1.55, tufts: 1100, tiers: 9, aspect: 0.12, size: 0.42, needle: true },
   },
   {
     id: 'column',
     name: '기둥 나무',
     trunk: { length: 1.0, radius: 0.12, splits: 1, spread: 0.0, falloff: 1.0, depth: 1, up: 1.0, wobble: 0.02 },
-    leaves: { kind: 'column', height: 4.4, radius: 0.72, count: 22000, aspect: 0.35, size: 0.09 },
+    leaves: { kind: 'column', height: 4.4, radius: 0.62, count: 28000, aspect: 0.35, size: 0.09 },
   },
   {
     id: 'willow',
