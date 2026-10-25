@@ -1,7 +1,7 @@
 {
   "name": "season-tree",
   "private": true,
-  "version": "0.3.2",
+  "version": "0.3.3",
   "type": "module",
   "description": "계절나무: 잎 수천 장으로 그린 나무 한 그루. 계절을 바꾸고, 모양을 바꾸고, 바람에 잎이 날린다. three.js TSL (WebGPU, WebGL 2 fallback).",
   "scripts": {
