@@ -3,7 +3,7 @@
 // ground, lets it fade and grows it back. The fragment stage paints a flat seasonal colour and
 // cuts the card into a rounded leaf.
 import * as THREE from 'three/webgpu';
-import { Fn, If, Discard, attribute, positionGeometry, uv, float, vec2, vec3, vec4, length, mix, sin, cos, fract, smoothstep, step } from 'three/tsl';
+import { Fn, If, Discard, attribute, positionGeometry, uv, float, vec2, vec3, vec4, length, mix, sin, cos, atan, abs, max, fract, smoothstep, step } from 'three/tsl';
 import { seasonal, pick, bendAt, qRotate, qMul, qAxis, toGround } from './common.js';
 
 // where a leaf is right now, how big, and how it is turned: shared by the leaves and their shadows
@@ -50,17 +50,30 @@ const leafPlacement = (u) =>
   });
   // a newly planted tree leafs out from the ground up
   scale.mulAssign(smoothstep(0.0, 0.6, u.grow.sub(h.mul(0.14)).sub(phase.mul(0.35))));
-  const local = vec3(positionGeometry.xy.mul(size).mul(scale).mul(u.leafScale), 0.0);
+  const local = vec3(positionGeometry.xy.mul(size).mul(scale).mul(vec2(u.leafScale, u.leafScale.mul(u.leafAspect))), 0.0);
   return pos.add(qRotate(rot, local));
   })();
 
-// The leaf's shape: a rounded blob, a touch narrower toward the tip, with a crisp edge (the
-// multisample mask only smooths the last few percent). Returns the distance from the centre
-// (0 .. 1 at the edge) and the coverage.
-const petal = () => {
+// The leaf's shape, cut from the card with a crisp edge (the multisample mask only smooths the
+// last few percent). A broad leaf is an oval that narrows toward its tip (+x) by the season's
+// taper; in summer its outline is pushed in and out into three lobes, like the reference's little
+// cloud-shaped leaves (only on roundish cards, so willow and column strokes stay plain). A
+// needle is a lens, pointed at both ends. Returns the distance from the centre (1 at the edge)
+// and the coverage.
+const petal = (u) => {
   const p = uv().sub(0.5);
-  const q = vec2(p.x, p.y.div(float(1.0).sub(p.x.add(0.5).mul(0.22))));
-  const d = length(q).mul(2.0);
+  const size = attribute('aSize', 'vec2');
+  const phase = attribute('aData', 'vec4').y;
+  const roundish = smoothstep(0.55, 0.8, size.y.div(size.x));
+  const q = vec2(p.x, p.y.div(float(1.0).sub(p.x.add(0.5).mul(u.leafTaper))));
+  const theta = atan(q.y, q.x);
+  const turn = phase.mul(6.2832);
+  const bump = cos(theta.mul(3.0).add(turn)).mul(0.2).add(cos(theta.mul(2.0).sub(turn)).mul(0.08));
+  const outline = float(1.0).sub(u.leafLobes.mul(roundish).mul(bump));
+  const dLeaf = length(q).mul(2.0).div(outline);
+  const x2 = abs(p.x).mul(2.0);
+  const dLens = max(x2, abs(p.y).mul(2.0).div(max(float(1.0).sub(x2.mul(x2)), 0.001)));
+  const d = mix(dLeaf, dLens, u.leafKind);
   const cover = smoothstep(1.0, 0.94, d);
   If(cover.lessThan(0.02), () => {
     Discard();
@@ -74,7 +87,7 @@ export function leafMaterial(u) {
   m.alphaToCoverage = true; // soft edges through the multisample mask, no sorting needed
   m.positionNode = leafPlacement(u);
   m.fragmentNode = Fn(() => {
-    const { cover } = petal();
+    const { cover } = petal(u);
     const data = attribute('aData', 'vec4'); // colour slot, phase, fall, light (0 shadow .. 1 lit)
     const lit = data.w;
     // three flat tones, as in the reference: the shadow colour over the far side of each lobe,
@@ -99,7 +112,7 @@ export function leafShadowMaterial(u) {
   m.depthWrite = false;
   m.positionNode = toGround(u, leafPlacement(u));
   m.fragmentNode = Fn(() => {
-    const { cover } = petal();
+    const { cover } = petal(u);
     return vec4(seasonal(u, (s) => s.shadow), cover.mul(0.5));
   })();
   return m;

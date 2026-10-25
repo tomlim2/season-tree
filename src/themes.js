@@ -13,6 +13,9 @@ export const THEMES = [
     leafShade: '#bd8fc6',
     leafLight: '#fbd3df',
     leafScale: 0.8,
+    leafAspect: 0.8, // petals: small eggs, a little narrower at one end
+    leafTaper: 0.3,
+    leafLobes: 0,
     shadow: '#8f8899',
   },
   {
@@ -26,6 +29,9 @@ export const THEMES = [
     leafShade: '#1f7d79',
     leafLight: '#cde873',
     leafScale: 1.2,
+    leafAspect: 1.0, // broad leaves: round, lobed like little clouds
+    leafTaper: 0.1,
+    leafLobes: 1,
     shadow: '#7f8aa0',
   },
   {
@@ -39,6 +45,9 @@ export const THEMES = [
     leafShade: '#c8521c',
     leafLight: '#ffd453',
     leafScale: 1.0,
+    leafAspect: 0.72, // longer ovals, pointed like lemons
+    leafTaper: 0.36,
+    leafLobes: 0,
     shadow: '#a08a78',
   },
   {
@@ -52,6 +61,9 @@ export const THEMES = [
     leafShade: '#aac3da',
     leafLight: '#ffffff',
     leafScale: 0.85,
+    leafAspect: 1.1, // round discs of snow
+    leafTaper: 0.04,
+    leafLobes: 0,
     shadow: '#7c94b4',
   },
   {
@@ -65,6 +77,9 @@ export const THEMES = [
     leafShade: '#12395a',
     leafLight: '#86dbe0',
     leafScale: 1.0,
+    leafAspect: 0.85, // ovals
+    leafTaper: 0.22,
+    leafLobes: 0,
     shadow: '#0c1736',
   },
 ];
@@ -81,13 +96,13 @@ export const SHAPES = [
     id: 'conifer',
     name: '침엽수',
     trunk: { length: 1.2, radius: 0.13, splits: 1, spread: 0.0, falloff: 1.0, depth: 1, up: 1.0, wobble: 0.03, whorls: 9, cone: 1.5 },
-    leaves: { kind: 'cone', height: 4.6, radius: 1.5, count: 22000, aspect: 0.3, size: 0.11 },
+    leaves: { kind: 'cone', height: 4.6, radius: 1.5, count: 22000, aspect: 0.2, size: 0.12, needle: true },
   },
   {
     id: 'column',
     name: '기둥 나무',
     trunk: { length: 1.0, radius: 0.12, splits: 1, spread: 0.0, falloff: 1.0, depth: 1, up: 1.0, wobble: 0.02 },
-    leaves: { kind: 'column', height: 4.4, radius: 0.72, count: 22000, aspect: 0.5, size: 0.085 },
+    leaves: { kind: 'column', height: 4.4, radius: 0.72, count: 22000, aspect: 0.35, size: 0.09 },
   },
   {
     id: 'willow',
